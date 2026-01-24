@@ -1,0 +1,518 @@
+package org.crisisconnect.service;
+
+import org.crisisconnect.dto.FullNeedResponse;
+import org.crisisconnect.dto.RedactedNeedResponse;
+import org.crisisconnect.model.entity.Need;
+import org.crisisconnect.model.entity.User;
+import org.crisisconnect.model.enums.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Unit tests for NeedPrivacyFilterService
+ *
+ * Tests cover:
+ * - Privacy filtering logic (redacted vs full responses)
+ * - Authorization checks for full access
+ * - Audit logging for PII access
+ * - List filtering (always redacted)
+ * - Field mapping and data transformations
+ */
+@ExtendWith(MockitoExtension.class)
+class NeedPrivacyFilterServiceTest {
+
+    @Mock
+    private AuditService auditService;
+
+    @InjectMocks
+    private NeedPrivacyFilterService privacyFilterService;
+
+    private Need testNeed;
+    private User creator;
+    private User ngoStaff;
+    private User admin;
+    private User unrelatedUser;
+    private String testIpAddress = "192.168.1.100";
+
+    @BeforeEach
+    void setUp() {
+        UUID creatorId = UUID.randomUUID();
+        UUID orgId = UUID.randomUUID();
+
+        // Create test need with all fields
+        testNeed = new Need();
+        testNeed.setId(UUID.randomUUID());
+        testNeed.setStatus(NeedStatus.NEW);
+        testNeed.setCategory(NeedCategory.FOOD);
+        testNeed.setUrgencyLevel(UrgencyLevel.HIGH);
+        testNeed.setCountry("USA");
+        testNeed.setRegionOrState("California");
+        testNeed.setCity("Los Angeles");
+        testNeed.setDescription("Detailed description of need with PII");
+        testNeed.setLocationText("123 Main Street, Apt 4B");
+        testNeed.setLocationLat(34.0522);
+        testNeed.setLocationLng(-118.2437);
+        testNeed.setVulnerabilityFlags("elderly, mobility-impaired");
+        testNeed.setGeneralizedVulnerabilityFlags("vulnerable population");
+        testNeed.setBeneficiaryName("John Doe");
+        testNeed.setBeneficiaryPhone("+1234567890");
+        testNeed.setBeneficiaryEmail("john.doe@example.com");
+        testNeed.setSensitiveNotes("Sensitive case notes with PII");
+        testNeed.setCreatedByUserId(creatorId);
+        testNeed.setAssignedOrganizationId(orgId);
+        testNeed.setCreatedAt(LocalDateTime.now().minusDays(1));
+        testNeed.setUpdatedAt(LocalDateTime.now());
+
+        // Create test users
+        creator = new User();
+        creator.setId(creatorId);
+        creator.setRole(UserRole.FIELD_WORKER);
+        creator.setEmail("creator@test.com");
+
+        ngoStaff = new User();
+        ngoStaff.setId(UUID.randomUUID());
+        ngoStaff.setRole(UserRole.NGO_STAFF);
+        ngoStaff.setOrganizationId(orgId);
+        ngoStaff.setEmail("ngo@test.com");
+
+        admin = new User();
+        admin.setId(UUID.randomUUID());
+        admin.setRole(UserRole.ADMIN);
+        admin.setEmail("admin@test.com");
+
+        unrelatedUser = new User();
+        unrelatedUser.setId(UUID.randomUUID());
+        unrelatedUser.setRole(UserRole.NGO_STAFF);
+        unrelatedUser.setOrganizationId(UUID.randomUUID()); // Different org
+        unrelatedUser.setEmail("unrelated@test.com");
+    }
+
+    // ==================== filterNeed Tests ====================
+
+    @Test
+    void testFilterNeed_Creator_ShouldReturnFullResponse() {
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, creator, testIpAddress);
+
+        // Assert
+        assertInstanceOf(FullNeedResponse.class, result, "Creator should receive full response");
+
+        FullNeedResponse fullResponse = (FullNeedResponse) result;
+        assertEquals(testNeed.getDescription(), fullResponse.getDescription());
+        assertEquals(testNeed.getCity(), fullResponse.getCity());
+        assertEquals(testNeed.getBeneficiaryName(), fullResponse.getBeneficiaryName());
+        assertEquals(testNeed.getBeneficiaryPhone(), fullResponse.getBeneficiaryPhone());
+        assertEquals(testNeed.getBeneficiaryEmail(), fullResponse.getBeneficiaryEmail());
+        assertEquals(testNeed.getSensitiveNotes(), fullResponse.getSensitiveNotes());
+
+        // Verify audit log
+        verify(auditService).logAction(
+            eq(creator.getId()),
+            eq("NEED_ACCESSED_FULL"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            anyString(),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testFilterNeed_AssignedNGO_ShouldReturnFullResponse() {
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, ngoStaff, testIpAddress);
+
+        // Assert
+        assertInstanceOf(FullNeedResponse.class, result);
+
+        FullNeedResponse fullResponse = (FullNeedResponse) result;
+        assertNotNull(fullResponse.getDescription());
+        assertNotNull(fullResponse.getBeneficiaryName());
+        assertNotNull(fullResponse.getSensitiveNotes());
+
+        // Verify audit log
+        verify(auditService).logAction(
+            eq(ngoStaff.getId()),
+            eq("NEED_ACCESSED_FULL"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            anyString(),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testFilterNeed_Admin_ShouldReturnFullResponse() {
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, admin, testIpAddress);
+
+        // Assert
+        assertInstanceOf(FullNeedResponse.class, result);
+
+        FullNeedResponse fullResponse = (FullNeedResponse) result;
+        assertNotNull(fullResponse.getDescription());
+        assertNotNull(fullResponse.getBeneficiaryName());
+
+        // Verify audit log for admin access
+        verify(auditService).logAction(
+            eq(admin.getId()),
+            eq("NEED_ACCESSED_FULL"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            anyString(),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testFilterNeed_UnrelatedUser_ShouldReturnRedactedResponse() {
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, unrelatedUser, testIpAddress);
+
+        // Assert
+        assertInstanceOf(RedactedNeedResponse.class, result, "Unrelated user should receive redacted response");
+
+        RedactedNeedResponse redactedResponse = (RedactedNeedResponse) result;
+
+        // Verify public fields are present
+        assertEquals(testNeed.getId(), redactedResponse.getId());
+        assertEquals(testNeed.getStatus(), redactedResponse.getStatus());
+        assertEquals(testNeed.getCategory(), redactedResponse.getCategory());
+        assertEquals(testNeed.getUrgencyLevel(), redactedResponse.getUrgencyLevel());
+        assertEquals(testNeed.getCountry(), redactedResponse.getCountry());
+        assertEquals(testNeed.getRegionOrState(), redactedResponse.getRegionOrState());
+        assertEquals(testNeed.getGeneralizedVulnerabilityFlags(),
+            redactedResponse.getGeneralizedVulnerabilityFlags());
+
+        // Verify audit log for redacted access
+        verify(auditService).logAction(
+            eq(unrelatedUser.getId()),
+            eq("NEED_ACCESSED_REDACTED"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            anyString(),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testFilterNeed_FullResponse_DoesNotContainSensitiveFieldsInWrongPlace() {
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, creator, testIpAddress);
+
+        // Assert
+        FullNeedResponse fullResponse = (FullNeedResponse) result;
+
+        // Verify all PII fields are accessible
+        assertNotNull(fullResponse.getDescription());
+        assertNotNull(fullResponse.getCity());
+        assertNotNull(fullResponse.getLocationLat());
+        assertNotNull(fullResponse.getLocationLng());
+        assertNotNull(fullResponse.getBeneficiaryName());
+        assertNotNull(fullResponse.getBeneficiaryPhone());
+        assertNotNull(fullResponse.getBeneficiaryEmail());
+    }
+
+    // ==================== filterNeedsList Tests ====================
+
+    @Test
+    void testFilterNeedsList_AlwaysReturnsRedacted() {
+        // Arrange
+        Need need1 = createBasicNeed();
+        Need need2 = createBasicNeed();
+        Need need3 = createBasicNeed();
+        List<Need> needs = Arrays.asList(need1, need2, need3);
+
+        // Act
+        List<RedactedNeedResponse> result = privacyFilterService.filterNeedsList(needs);
+
+        // Assert
+        assertEquals(3, result.size(), "Should return same number of needs");
+
+        for (RedactedNeedResponse response : result) {
+            // Verify all are redacted responses
+            assertNotNull(response.getId());
+            assertNotNull(response.getStatus());
+            assertNotNull(response.getCategory());
+            assertNotNull(response.getCountry());
+        }
+
+        // Verify NO audit logs for list view (too many)
+        verify(auditService, never()).logAction(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void testFilterNeedsList_EmptyList() {
+        // Arrange
+        List<Need> needs = Arrays.asList();
+
+        // Act
+        List<RedactedNeedResponse> result = privacyFilterService.filterNeedsList(needs);
+
+        // Assert
+        assertEquals(0, result.size(), "Should return empty list");
+    }
+
+    @Test
+    void testFilterNeedsList_PreservesOrder() {
+        // Arrange
+        Need need1 = createBasicNeed();
+        Need need2 = createBasicNeed();
+        Need need3 = createBasicNeed();
+
+        need1.setUrgencyLevel(UrgencyLevel.LOW);
+        need2.setUrgencyLevel(UrgencyLevel.MEDIUM);
+        need3.setUrgencyLevel(UrgencyLevel.HIGH);
+
+        List<Need> needs = Arrays.asList(need1, need2, need3);
+
+        // Act
+        List<RedactedNeedResponse> result = privacyFilterService.filterNeedsList(needs);
+
+        // Assert
+        assertEquals(UrgencyLevel.LOW, result.get(0).getUrgencyLevel());
+        assertEquals(UrgencyLevel.MEDIUM, result.get(1).getUrgencyLevel());
+        assertEquals(UrgencyLevel.HIGH, result.get(2).getUrgencyLevel());
+    }
+
+    // ==================== canViewFullDetails Tests ====================
+
+    @Test
+    void testCanViewFullDetails_Creator() {
+        // Arrange
+        testNeed.setCreatedByUserId(creator.getId());
+
+        // Act
+        boolean result = privacyFilterService.canViewFullDetails(testNeed, creator);
+
+        // Assert
+        assertTrue(result, "Creator should be able to view full details");
+    }
+
+    @Test
+    void testCanViewFullDetails_AssignedOrganization() {
+        // Arrange
+        testNeed.setAssignedOrganizationId(ngoStaff.getOrganizationId());
+
+        // Act
+        boolean result = privacyFilterService.canViewFullDetails(testNeed, ngoStaff);
+
+        // Assert
+        assertTrue(result, "Assigned NGO should be able to view full details");
+    }
+
+    @Test
+    void testCanViewFullDetails_Admin() {
+        // Act
+        boolean result = privacyFilterService.canViewFullDetails(testNeed, admin);
+
+        // Assert
+        assertTrue(result, "Admin should be able to view full details");
+    }
+
+    @Test
+    void testCanViewFullDetails_UnrelatedUser() {
+        // Act
+        boolean result = privacyFilterService.canViewFullDetails(testNeed, unrelatedUser);
+
+        // Assert
+        assertFalse(result, "Unrelated user should not be able to view full details");
+    }
+
+    @Test
+    void testCanViewFullDetails_UnassignedNeed() {
+        // Arrange
+        testNeed.setAssignedOrganizationId(null);
+        testNeed.setCreatedByUserId(creator.getId());
+
+        // Act
+        boolean resultNGO = privacyFilterService.canViewFullDetails(testNeed, ngoStaff);
+        boolean resultCreator = privacyFilterService.canViewFullDetails(testNeed, creator);
+
+        // Assert
+        assertFalse(resultNGO, "NGO should not see unassigned need details");
+        assertTrue(resultCreator, "Creator should still see their own need");
+    }
+
+    // ==================== Data Transformation Tests ====================
+
+    @Test
+    void testBuildRedactedResponse_NoSensitiveData() {
+        // Act
+        RedactedNeedResponse response = privacyFilterService.buildRedactedResponse(testNeed);
+
+        // Assert
+        // Public fields should be present
+        assertEquals(testNeed.getId(), response.getId());
+        assertEquals(testNeed.getStatus(), response.getStatus());
+        assertEquals(testNeed.getCategory(), response.getCategory());
+        assertEquals(testNeed.getCountry(), response.getCountry());
+
+        // This is a redacted response, so no PII fields exist
+        // (RedactedNeedResponse doesn't have beneficiaryName, description, etc.)
+    }
+
+    @Test
+    void testBuildFullResponse_AllFieldsIncluded() {
+        // Act
+        FullNeedResponse response = privacyFilterService.buildFullResponse(testNeed, creator);
+
+        // Assert
+        // Verify all fields are mapped correctly
+        assertEquals(testNeed.getId(), response.getId());
+        assertEquals(testNeed.getDescription(), response.getDescription());
+        assertEquals(testNeed.getCity(), response.getCity());
+        assertEquals(testNeed.getLocationText(), response.getLocationText());
+        assertEquals(testNeed.getLocationLat(), response.getLocationLat());
+        assertEquals(testNeed.getLocationLng(), response.getLocationLng());
+        assertEquals(testNeed.getBeneficiaryName(), response.getBeneficiaryName());
+        assertEquals(testNeed.getBeneficiaryPhone(), response.getBeneficiaryPhone());
+        assertEquals(testNeed.getBeneficiaryEmail(), response.getBeneficiaryEmail());
+        assertEquals(testNeed.getSensitiveNotes(), response.getSensitiveNotes());
+        assertEquals(testNeed.getVulnerabilityFlags(), response.getVulnerabilityFlags());
+    }
+
+    @Test
+    void testBuildFullResponse_NullOptionalFields() {
+        // Arrange
+        testNeed.setCity(null);
+        testNeed.setLocationText(null);
+        testNeed.setBeneficiaryPhone(null);
+        testNeed.setSensitiveNotes(null);
+
+        // Act
+        FullNeedResponse response = privacyFilterService.buildFullResponse(testNeed, creator);
+
+        // Assert
+        assertNull(response.getCity());
+        assertNull(response.getLocationText());
+        assertNull(response.getBeneficiaryPhone());
+        assertNull(response.getSensitiveNotes());
+
+        // But required fields should still be present
+        assertNotNull(response.getId());
+        assertNotNull(response.getStatus());
+        assertNotNull(response.getDescription());
+    }
+
+    // ==================== Audit Logging Tests ====================
+
+    @Test
+    void testAuditLogging_FullAccessLogged() {
+        // Act
+        privacyFilterService.filterNeed(testNeed, creator, testIpAddress);
+
+        // Assert
+        verify(auditService, times(1)).logAction(
+            eq(creator.getId()),
+            eq("NEED_ACCESSED_FULL"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            contains("Full access granted"),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testAuditLogging_RedactedAccessLogged() {
+        // Act
+        privacyFilterService.filterNeed(testNeed, unrelatedUser, testIpAddress);
+
+        // Assert
+        verify(auditService, times(1)).logAction(
+            eq(unrelatedUser.getId()),
+            eq("NEED_ACCESSED_REDACTED"),
+            eq("NEED"),
+            eq(testNeed.getId()),
+            contains("Redacted access"),
+            eq(testIpAddress)
+        );
+    }
+
+    @Test
+    void testAuditLogging_MultipleAccesses() {
+        // Act
+        privacyFilterService.filterNeed(testNeed, creator, testIpAddress);
+        privacyFilterService.filterNeed(testNeed, ngoStaff, testIpAddress);
+        privacyFilterService.filterNeed(testNeed, unrelatedUser, testIpAddress);
+
+        // Assert
+        verify(auditService, times(2)).logAction(
+            any(),
+            eq("NEED_ACCESSED_FULL"),
+            any(),
+            any(),
+            any(),
+            any()
+        );
+
+        verify(auditService, times(1)).logAction(
+            any(),
+            eq("NEED_ACCESSED_REDACTED"),
+            any(),
+            any(),
+            any(),
+            any()
+        );
+    }
+
+    // ==================== Edge Cases ====================
+
+    @Test
+    void testFilterNeed_NullUser_ShouldThrowException() {
+        // Act & Assert
+        assertThrows(NullPointerException.class, () -> {
+            privacyFilterService.filterNeed(testNeed, null, testIpAddress);
+        });
+    }
+
+    @Test
+    void testFilterNeed_NullNeed_ShouldThrowException() {
+        // Act & Assert
+        assertThrows(NullPointerException.class, () -> {
+            privacyFilterService.filterNeed(null, creator, testIpAddress);
+        });
+    }
+
+    @Test
+    void testFilterNeed_UserWithNoOrganization() {
+        // Arrange
+        User userNoOrg = new User();
+        userNoOrg.setId(UUID.randomUUID());
+        userNoOrg.setRole(UserRole.NGO_STAFF);
+        userNoOrg.setOrganizationId(null); // No organization
+
+        // Act
+        Object result = privacyFilterService.filterNeed(testNeed, userNoOrg, testIpAddress);
+
+        // Assert
+        assertInstanceOf(RedactedNeedResponse.class, result,
+            "User without organization should get redacted response");
+    }
+
+    // ==================== Helper Methods ====================
+
+    private Need createBasicNeed() {
+        Need need = new Need();
+        need.setId(UUID.randomUUID());
+        need.setStatus(NeedStatus.NEW);
+        need.setCategory(NeedCategory.FOOD);
+        need.setUrgencyLevel(UrgencyLevel.MEDIUM);
+        need.setCountry("USA");
+        need.setRegionOrState("California");
+        need.setCreatedAt(LocalDateTime.now());
+        return need;
+    }
+}

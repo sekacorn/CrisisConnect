@@ -1,0 +1,52 @@
+# Environment files
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Backend
+backend/target/
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+
+# E2E Testing
+e2e/node_modules/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+postgres_data/
+
+# Test artifacts
+backend/target/
+frontend/coverage/
+e2e/cypress/screenshots/
+e2e/cypress/videos/
+
+# Process tracking
+.backend.pid
+.frontend.pid
+.db.pid
+
+# Application logs
+backend.log
+frontend.log
+
+# Test reports
+*.log

@@ -1,0 +1,259 @@
+package org.crisisconnect.service;
+
+import org.crisisconnect.model.entity.User;
+import org.crisisconnect.model.enums.UserRole;
+import org.crisisconnect.repository.AuditLogRepository;
+import org.crisisconnect.repository.NeedRepository;
+import org.crisisconnect.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Suspicious Activity Detection Service
+ *
+ * Implements spec/35_safeguarding_abuse_prevention.md requirements.
+ *
+ * Detects patterns that may indicate:
+ * - Data harvesting (many views, no claims)
+ * - Fraudulent need creation
+ * - Account compromise
+ * - Insider threats
+ *
+ * Runs scheduled jobs to flag suspicious patterns for admin review.
+ */
+@Service
+public class SuspiciousActivityService {
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private NeedRepository needRepository;
+
+    @Autowired
+    private AuditService auditService;
+
+    // Detection thresholds
+    private static final int SUSPICIOUS_VIEW_THRESHOLD = 50; // Views without claims
+    private static final int ANOMALOUS_CREATION_THRESHOLD = 100; // Needs created in 7 days
+    private static final int HIGH_ACCESS_RATE_THRESHOLD = 200; // API calls in 1 hour
+
+    /**
+     * Detect NGO staff browsing many needs without claiming
+     * Runs hourly
+     *
+     * Pattern: More than 50 full need views in 24 hours with 0 claims = suspicious
+     */
+    @Scheduled(cron = "0 0 * * * *") // Every hour
+    public void detectSuspiciousBrowsingPatterns() {
+        List<User> ngoStaff = userRepository.findByRole(UserRole.NGO_STAFF);
+
+        for (User user : ngoStaff) {
+            LocalDateTime last24Hours = LocalDateTime.now().minusHours(24);
+
+            // Count full need views (audit log action: NEED_ACCESSED with full=true)
+            long viewsLast24h = auditLogRepository.countByUserIdAndActionAndCreatedAtAfter(
+                    user.getId(),
+                    "NEED_ACCESSED_FULL",
+                    last24Hours
+            );
+
+            // Count need claims
+            long claimsLast24h = auditLogRepository.countByUserIdAndActionAndCreatedAtAfter(
+                    user.getId(),
+                    "NEED_CLAIMED",
+                    last24Hours
+            );
+
+            // Flag if many views but no claims
+            if (viewsLast24h > SUSPICIOUS_VIEW_THRESHOLD && claimsLast24h == 0) {
+                flagSuspiciousActivity(
+                        user.getId(),
+                        "SUSPICIOUS_BROWSING_PATTERN",
+                        String.format("User viewed %d needs in 24 hours without claiming any", viewsLast24h)
+                );
+            }
+        }
+    }
+
+    /**
+     * Detect anomalous need creation rates
+     * Runs daily
+     *
+     * Pattern: More than 100 needs created in 7 days by one field worker = review needed
+     */
+    @Scheduled(cron = "0 0 8 * * *") // Daily at 8 AM
+    public void detectAnomalousCreationRates() {
+        List<User> fieldWorkers = userRepository.findByRole(UserRole.FIELD_WORKER);
+
+        for (User worker : fieldWorkers) {
+            LocalDateTime last7Days = LocalDateTime.now().minusDays(7);
+
+            long needsCreated = needRepository.countByCreatedByUserIdAndCreatedAtAfter(
+                    worker.getId(),
+                    last7Days
+            );
+
+            if (needsCreated > ANOMALOUS_CREATION_THRESHOLD) {
+                flagSuspiciousActivity(
+                        worker.getId(),
+                        "ANOMALOUS_CREATION_RATE",
+                        String.format("Field worker created %d needs in 7 days (review for fraud)", needsCreated)
+                );
+            }
+        }
+    }
+
+    /**
+     * Detect high-risk case access patterns
+     * Runs hourly
+     *
+     * Alerts when high-risk cases are accessed frequently
+     */
+    @Scheduled(cron = "0 15 * * * *") // Every hour at :15
+    public void detectHighRiskCaseAccessPatterns() {
+        LocalDateTime lastHour = LocalDateTime.now().minusHours(1);
+
+        // Find all high-risk case accesses in last hour
+        // (Requires high-risk flag implementation in Need entity - future enhancement)
+        // For now, log placeholder for future implementation
+
+        // TODO: Implement when high-risk case flagging is added
+    }
+
+    /**
+     * Detect unusual access times or locations
+     * Runs daily
+     *
+     * Pattern: Login from new IP address or unusual time
+     */
+    @Scheduled(cron = "0 0 6 * * *") // Daily at 6 AM
+    public void detectUnusualAccessPatterns() {
+        LocalDateTime last24Hours = LocalDateTime.now().minusHours(24);
+
+        // Find logins from multiple IP addresses in short time
+        // This requires IP address tracking in audit logs
+
+        // TODO: Implement IP-based anomaly detection
+        // - Multiple IPs for same user in short time
+        // - Login from new geographic location (requires GeoIP lookup)
+        // - Access at unusual hours (e.g., 2 AM for office worker)
+    }
+
+    /**
+     * Detect duplicate beneficiary attempts
+     *
+     * @param beneficiaryPhone Phone number (hashed)
+     * @return List of warning messages if duplicates found
+     */
+    public List<String> checkForDuplicateBeneficiaries(String beneficiaryPhone) {
+        List<String> warnings = new ArrayList<>();
+
+        if (beneficiaryPhone == null || beneficiaryPhone.isEmpty()) {
+            return warnings;
+        }
+
+        LocalDateTime last30Days = LocalDateTime.now().minusDays(30);
+
+        // Hash phone number for comparison (privacy-preserving)
+        String phoneHash = hashPhoneNumber(beneficiaryPhone);
+
+        // Count recent needs with similar phone hash
+        // This requires a phone_hash column in SensitiveInfo table (future enhancement)
+
+        // TODO: Implement duplicate detection with hashed phone numbers
+        // If count > 3 in 30 days, flag as possible duplicate
+
+        return warnings;
+    }
+
+    /**
+     * Get suspicious activity summary for admin dashboard
+     *
+     * @return List of recent suspicious activities
+     */
+    public List<SuspiciousActivityAlert> getRecentSuspiciousActivities() {
+        List<SuspiciousActivityAlert> alerts = new ArrayList<>();
+
+        LocalDateTime last7Days = LocalDateTime.now().minusDays(7);
+
+        // Query audit logs for suspicious activity flags
+        // Return top 50 most recent alerts
+
+        // TODO: Implement query to fetch suspicious activity audit logs
+
+        return alerts;
+    }
+
+    /**
+     * Flag suspicious activity in audit log
+     */
+    private void flagSuspiciousActivity(UUID userId, String activityType, String details) {
+        auditService.logAction(
+                userId,
+                activityType,
+                "USER",
+                userId,
+                details,
+                null
+        );
+
+        // Future enhancement: Send notification to admins
+        // notificationService.notifyAdmins("Suspicious activity detected", details);
+    }
+
+    /**
+     * Hash phone number for privacy-preserving duplicate detection
+     */
+    private String hashPhoneNumber(String phone) {
+        // Remove non-digits
+        String digitsOnly = phone.replaceAll("[^0-9]", "");
+
+        // Use SHA-256 hash
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(digitsOnly.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            // Convert to hex string
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Data class for suspicious activity alerts
+     */
+    public static class SuspiciousActivityAlert {
+        public UUID userId;
+        public String userEmail;
+        public String activityType;
+        public String details;
+        public LocalDateTime timestamp;
+
+        public SuspiciousActivityAlert(UUID userId, String userEmail, String activityType,
+                                        String details, LocalDateTime timestamp) {
+            this.userId = userId;
+            this.userEmail = userEmail;
+            this.activityType = activityType;
+            this.details = details;
+            this.timestamp = timestamp;
+        }
+    }
+}

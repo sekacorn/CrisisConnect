@@ -1,0 +1,18 @@
+{
+  "name": "crisisconnect-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "cypress run",
+    "test:open": "cypress open"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "axe-core": "^4.11.1",
+    "cypress": "^13.6.2",
+    "cypress-audit": "^1.1.0",
+    "cypress-axe": "^1.7.0",
+    "lighthouse": "^13.0.1",
+    "typescript": "^5.3.0"
+  }
+}
