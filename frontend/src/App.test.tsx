@@ -19,6 +19,11 @@ jest.mock('./pages/Login', () => ({
   default: () => <div>Login Page</div>,
 }));
 
+jest.mock('./pages/LandingPage', () => ({
+  __esModule: true,
+  default: () => <div>Landing Page</div>,
+}));
+
 jest.mock('./pages/Dashboard', () => ({
   __esModule: true,
   default: () => <div>Dashboard Page</div>,
@@ -53,8 +58,6 @@ describe('App', () => {
 
   it('should render login page by default for unauthenticated user', () => {
     render(<App />);
-    // Since user is null, should redirect to /login
-    // The actual routing behavior is tested in integration tests
-    expect(document.body).toBeTruthy();
+    expect(screen.getByText('Landing Page')).toBeInTheDocument();
   });
 });

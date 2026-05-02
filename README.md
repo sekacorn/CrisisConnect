@@ -1,6 +1,8 @@
 # CrisisConnect
 
-Free and low-cost humanitarian coordination software for public-interest teams.
+## Project Name and Short Mission Statement
+
+CrisisConnect is free and low-cost humanitarian coordination software for public-interest teams.
 
 CrisisConnect helps field workers, nonprofits, universities, researchers, students, civic technologists, and community organizations coordinate assistance requests without buying expensive proprietary case-intake or aid-coordination software. The project is meant to be run, inspected, modified, and adapted by teams doing mission-driven work.
 
@@ -48,7 +50,7 @@ Security vulnerability contact exists in the repository: `sekacorn@gmail.com`. N
 
 Current code and documentation include:
 
-- Frontend: React 18, TypeScript, React Router, Axios API client, pages for login, dashboard, needs list, need detail, need creation, and admin views.
+- Frontend: React 18, TypeScript, React Router, Axios API client, a public landing page, login, dashboard, needs list, need detail, need creation, and admin views.
 - Backend: Java/Spring Boot REST API with controllers for authentication, needs, organizations, admin functions, sessions, MFA, consent, GDPR-style export/deletion, and password policies.
 - Data model: users, organizations, service areas, needs, need updates, audit logs, sensitive information, password policy/history, login attempts, user sessions, and user consent.
 - Security controls: JWT authentication, BCrypt password hashing, Spring Security, role checks, organization verification, redacted responses, encrypted sensitive fields, audit logging, account lockout/password policy services, session services, and in-memory rate limiting.
@@ -62,42 +64,87 @@ Current code and documentation include:
 
 Planned or partially documented ideas such as SMS/WhatsApp integration, GIS mapping, mobile apps, multilingual support, SSO/SAML, external SIEM integration, and formal certification are not implemented as production features in this repo.
 
+## Recommended Features For Future Versions
+
+Teams evaluating this kind of software often need more than the current starter workflow before using it broadly. The following features would be useful next additions, but they should be treated as future work unless implemented in the code:
+
+- Mobile-first field intake with offline drafts, sync conflict handling, and low-bandwidth behavior.
+- Multilingual interface support, including right-to-left language support where needed.
+- SMS, WhatsApp, email, or hotline integrations for intake follow-up and status notifications.
+- Map and service-area views for matching needs to nearby organizations without exposing exact locations unnecessarily.
+- Configurable intake forms so different programs can collect only the fields they need.
+- Referral workflows between organizations, including rejection reasons, handoff notes, and escalation paths.
+- Safer beneficiary contact controls, including consent prompts, restricted notes, and high-risk case flags.
+- Reporting exports for aggregate, non-identifying statistics by category, urgency, geography, and response time.
+- Data import/export tools for common nonprofit and research workflows, with redaction controls.
+- Stronger production identity options such as SSO/SAML/OIDC and enforced MFA for administrators.
+- Centralized monitoring, tamper-resistant audit logs, and security alert integrations.
+- Backup, restore, retention, and deletion jobs that are configurable per deployment.
+- Full accessibility audit coverage across all workflows and documented remediation status.
+- Deployment templates for common low-cost hosts, universities, and small organization infrastructure.
+- Optional AI-assisted triage or summarization only with human review, clear audit logs, and legal/privacy assessment.
+
 ## Screenshots
 
-### Login Page
-![Login Screen](Screenshot%20(1).png)
+The repository includes screenshots from the current demo application. These are demo views and should not contain real beneficiary or operational data.
 
-### Dashboard
-![Dashboard View](Screenshot%20(2).png)
+### Needs List
 
-### Needs Management
-![Needs List](Screenshot%20(3).png)
-![Need Details](Screenshot%20(4).png)
+![Assistance needs list with redacted need cards](Screenshot%20(1).png)
 
-### Create New Need
-![Create Need Form](Screenshot%20(5).png)
+### Main Dashboard
 
-### User Management
-![User List](Screenshot%20(6).png)
+![Field worker dashboard with need actions and security summary](Screenshot%20(9).png)
+
+### Beneficiary Dashboard
+
+![Beneficiary dashboard with limited available actions](Screenshot%20(14).png)
+
+### Admin Statistics
+
+![Admin statistics dashboard with user, organization, and need metrics](Screenshot%20(2).png)
+
+### Admin Statistics, Lower Sections
+
+![Admin statistics dashboard with category, urgency, activity, and security metrics](Screenshot%20(8).png)
 
 ### Organization Management
-![Organizations](Screenshot%20(7).png)
 
-### Admin Panel
-![Admin Dashboard](Screenshot%20(8).png)
+![Admin organization management table with status filter](Screenshot%20(3).png)
 
-### Reports and Analytics
-![Analytics View](Screenshot%20(9).png)
+### Organization Management, Alternate Capture
 
-### Settings
-![Settings Page](Screenshot%20(10).png)
+![Admin organization management table showing organization status badges](Screenshot%20(4).png)
 
-### Additional Views
-![Additional Feature 1](Screenshot%20(11).png)
-![Additional Feature 2](Screenshot%20(12).png)
-![Additional Feature 3](Screenshot%20(13).png)
-![Additional Feature 4](Screenshot%20(14).png)
-![Additional Feature 5](Screenshot%20(15).png)
+### User Management
+
+![Admin user management table with roles, status, and edit actions](Screenshot%20(5).png)
+
+### User Management, Alternate Capture
+
+![Admin user management table with active and inactive users](Screenshot%20(6).png)
+
+### Suspicious Activity Monitoring
+
+![Admin suspicious activities table showing no recent suspicious activity](Screenshot%20(7).png)
+
+### Create Assistance Need
+
+![Create assistance need form showing need information and location fields](Screenshot%20(11).png)
+
+### Create Assistance Need, Sensitive Information
+
+![Create assistance need form showing encrypted sensitive information fields](Screenshot%20(12).png)
+
+### Needs List, Alternate Captures
+
+![Assistance needs list with privacy notice and status badges](Screenshot%20(10).png)
+
+![Assistance needs list showing multiple redacted assistance requests](Screenshot%20(15).png)
+
+### Dashboard, Cropped Capture
+
+![Cropped dashboard capture showing view needs and security summary](Screenshot%20(13).png)
 
 ## Compliance and Trust Posture
 
@@ -187,6 +234,7 @@ Important limitations and review points:
 - Rate limiting is in-memory and should be replaced or backed by shared infrastructure such as Redis or a reverse proxy for multi-instance deployments.
 - The repo contains compliance analyses and implementation notes, but no certification or authorization evidence.
 - Accessibility work is substantial but not proven complete across every screen.
+- A public landing page exists at `/`, while authenticated workflows remain behind the login route.
 - MFA, consent, session, GDPR, password policy, and suspicious activity services/controllers exist, but deployers should test the full end-to-end behavior before relying on them.
 - No AI functionality is currently implemented.
 
